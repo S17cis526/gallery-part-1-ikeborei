@@ -9,6 +9,8 @@ var http = require('http');
 var fs = require('fs');
 var port = 3000;
 var stylesheet = fs.readFileSync('gallery.css');
+var config = JSON.parse(fs.readFileSync('config.json'));
+
 
 function getImageNames(callback){
 
@@ -31,14 +33,21 @@ function buildGallery(imageNames){
   var html = '<!DOCTYPE html>';
       html += '<html>'
       html += '<head>';
-      html += '<title>Gallery</title>';
+      html += '<title>'+ config.title + '</title>';
       html += '<link href="gallery.css" rel="stylesheet" type="text/css"/>';
       html +='</head>';
       html += '<body>';
-      html += ' <h1>Gallery</h1>';
+      html += ' <h1>'+ config.title + '</h1>';
+      html += ' <form>';
+      html += '   <input type="text" name="title">';
+      html += '   <input type="submit" value="Change Gallery title">';
+      html += ' </form>';
       html += '<div id="container">';
       html += imageNamesToTags(imageNames).join('');
       html += '</div>';
+      html += '<form action="" method="POST" enctype="multipart/form-data">';
+      html += '<input type="file" name="image">';
+      html += '</form>'
       html += ' <h1>Hello.</h1> Time is ' + Date.now();
       html += '</body>';
       html += '</html>';
@@ -61,6 +70,7 @@ function serveGallery(request, response){
 }
 
 function serveImage(filename, request, response){
+
   var body = fs.readFile('images/' + filename, (error, body) => {
       if(error){
         console.error(error);
@@ -74,19 +84,66 @@ function serveImage(filename, request, response){
   });
 }
 
-var server = http.createServer((request, response) => {
+function uploadImage(request, response){
+  var buffer = '';
+  request.on('error', function(){
+    response. statusCode = 500;
+    response.end();
+  });
+  request.on('data', function(data){
+    buffer += data;
+  });
+  request.on('end', function(){
+    fs.writeFile('filename', data, function(err){
 
-  switch (request.url) {
+      if(err)
+      {
+        console.error(err);
+        response.statusCode = 500;
+        response.end();
+      }
+
+      //serveGallery()
+
+    });
+  });
+}
+
+var server = http.createServer((request, response) => {
+  var url = request.url.split('?');
+  var resource = url[0];
+  var queryString = url[1];
+
+  if(queryString)
+  {
+    var matches = /title=(.+)($|&)/.exec(queryString);
+    if(matches && matches[1])
+    {
+      config.title = matches[1];
+      fs.writeFile('config.json', JSON.stringify(config));
+    }
+
+  }
+
+  switch (resource) {
     case '/gallery':
     case '/':
-    serveGallery(request, response);
+    if(request.method == 'GET'){
+      serveGallery(request, response);
+    }
+    else if(request.method == 'POST')
+    {
+      uploadPicture(req, res);
+      response.end('POST ME!');
+    }
+
       break;
     case '/gallery.css':
       response.setHeader('Content-Type', 'text/css');
       response.end(stylesheet);
       break;
     default:
-      console.log(request.url);
+      //console.log(request.url);
       serveImage(request.url, request, response);
       break;
   }
@@ -96,7 +153,8 @@ server.listen(port, () => {
   console.log('Listening on port ' + port);
 });
 
-  //response.end(chess);
+
+//response.end(chess);
 
 /*case '/chess':
   serveImage('chess.jpg', request, response);
